@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Cart from "../models/Cart.js";
 import Product from "../models/productModel.js";
 
@@ -48,15 +49,34 @@ export const addToCart = async (req, res) => {
 
     const { productId, quantity } = req.body;
 
+    if (!productId || !quantity) {
+      return res.status(400).json({
+        status: "Fail",
+        message: "Product and quantity are required",
+      });
+    }
+
+    if (quantity < 1) {
+      return res.status(400).json({
+        status: "Fail",
+        message: "Quantity must be greater than 0",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({
+        status: "Fail",
+        message: "Invalid product ID",
+      });
+    }
+
     const product = await Product.findById(productId);
 
-    if (!product || !quantity) {
-
+    if (!product) {
       return res.status(404).json({
         status: "Fail",
-        message: "Product and quantity are required", 
+        message: "Product not found",
       });
-
     }
 
     let cart = await Cart.findOne({ buyer: buyerId });
@@ -75,38 +95,21 @@ export const addToCart = async (req, res) => {
     );
 
     if (itemIndex > -1) {
-
       cart.items[itemIndex].quantity += quantity;
-
     } else {
-
       cart.items.push({
         product: productId,
         quantity,
       });
-    
-      if(quantity < 1) {
-      return res.status(400).json({
-        status: "Fail",
-        message: "Quantity must be a greater than 0",
-      });
-    }
-
     }
 
     await cart.save();
-     
+
     await cart.populate("items.product");
-     
+
     return res.status(200).json({
       status: "Success",
-      message: "Product added Successfully",
-      data: cart,
-    });
-    
-    res.status(200).json({
-      status: "Success",
-      message: "Product added to cart",
+      message: "Product added successfully",
       data: cart,
     });
 
@@ -162,6 +165,7 @@ export const updateCartQuantity = async (req, res) => {
     }
 
     await cart.save();
+    await cart.populate("items.product", "name price image category");
 
     res.status(200).json({
       status: "Success",
@@ -204,6 +208,7 @@ export const removeCartItem = async (req, res) => {
     );
 
     await cart.save();
+    await cart.populate("items.product", "name price image category");
 
     res.status(200).json({
       status: "Success",

@@ -69,7 +69,6 @@ export const addProduct = async (req, res) => {
 export const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    // const userId = req.user._id;
     const { name, description, category, price } = req.body;
     const product = await Product.findOne({ _id: id });
 
@@ -107,7 +106,6 @@ export const updateProduct = async (req, res) => {
 export const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    // const userId = req.user._id;
     const deletedProduct = await Product.findByIdAndDelete(id);
 
     if (!deletedProduct) {

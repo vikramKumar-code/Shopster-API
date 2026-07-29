@@ -5,8 +5,8 @@ const protectBuyer = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(404).json({
-        status: "fail",
+      return res.status(401).json({
+        status: "Fail",
         message: "Token Not Provided",
       });
     }
@@ -15,7 +15,7 @@ const protectBuyer = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_BUYER);
     if (!decoded) {
       return res.status(401).json({
-        status: "fail",
+        status: "Fail",
         message: "Unauthorized",
       });
     }
@@ -23,7 +23,7 @@ const protectBuyer = async (req, res, next) => {
     const buyer = await Buyer.findById(decoded.id).select("-password");
     if (!buyer) {
       return res.status(404).json({
-        status: "fail",
+        status: "Fail",
         message: "Buyer Not Found",
       });
     }
@@ -31,8 +31,8 @@ const protectBuyer = async (req, res, next) => {
     req.user = buyer;
     next();
   } catch (error) {
-    return res.status(500).json({
-      status: "fail",
+    return res.status(401).json({
+      status: "Fail",
       message: `Failed to Authenticate Token: ${error.message}`,
     });
   }

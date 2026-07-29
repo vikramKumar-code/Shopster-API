@@ -4,6 +4,7 @@ const buyerSchema = new mongoose.Schema(
   {
     username: {
       type: String,
+      required: true,
       minlength: 3,
     },
     email: {
@@ -15,6 +16,7 @@ const buyerSchema = new mongoose.Schema(
       type: String,
       minlength: 8,
       required: true,
+      select: false,
     },
     phone: {
       type: Number,
