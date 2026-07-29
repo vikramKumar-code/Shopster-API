@@ -3,7 +3,6 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import generateToken from "../utils/generateToken.js";
 
-
 // Register Controller
 export const register = async (req, res) => {
   try {
@@ -30,7 +29,6 @@ export const register = async (req, res) => {
       message: "Registration Successful",
       token: generateToken(user._id),
     });
-
   } catch (error) {
     res.status(500).json({
       message: error.message,
@@ -38,14 +36,13 @@ export const register = async (req, res) => {
   }
 };
 
-
 // Login Controller
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     // User Model use hoga
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select("+password");
 
     if (!user) {
       return res.status(404).json({
@@ -90,7 +87,6 @@ export const getProfile = async (req, res) => {
     }
 
     res.status(200).json(user);
-
   } catch (error) {
     res.status(500).json({
       message: error.message,
