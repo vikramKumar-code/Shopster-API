@@ -7,6 +7,8 @@ import cors from "cors";
 import morgan from "morgan";
 import cartRoutes from "./router/cartRoutes.js";
 import buyerRoutes from "./router/buyerRoutes.js";
+import orderRoutes from "./router/orderRoutes.js";
+import adminOrderRoutes from "./router/adminOrderRoutes.js";
 
 config();
 
@@ -23,6 +25,8 @@ app.use("/api/product", productRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/buyer", buyerRoutes);
+app.use("/api/order", orderRoutes);
+app.use("/api/admin/orders", adminOrderRoutes);
 
 const startServer = async () => {
   await connectDB();
