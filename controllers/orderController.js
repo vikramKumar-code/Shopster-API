@@ -1,6 +1,5 @@
 import Order from "../models/Order.js";
 import Cart from "../models/Cart.js";
-import Product from "../models/productModel.js";
 
 export const placeOrder = async (req, res) => {
   try {
@@ -20,7 +19,7 @@ export const placeOrder = async (req, res) => {
     }
 
     const orderItems = cart.items.map((item) => ({
-      productId: item.product._id,
+      product: item.product._id,
       name: item.product.name,
       price: item.product.price,
       quantity: item.quantity,
@@ -31,7 +30,7 @@ export const placeOrder = async (req, res) => {
     }, 0);
 
     const order = await Order.create({
-      buyerId: buyerId,
+      buyer: buyerId,
       items: orderItems,
       totalAmount: totalAmount,
       shippingAddress,
@@ -43,20 +42,22 @@ export const placeOrder = async (req, res) => {
 
     return res.status(201).json({
       status: "Success",
-      message: "Orders fetched successfully",
-      data: orders,
+      message: "Order placed successfully",
+      data: order,
     });
   } catch (error) {
     return res.status(500).json({
       status: "Fail",
-      message: `Failed to fetch orders: ${error.message}`,
+      message: `Failed to place order: ${error.message}`,
     });
   }
 };
 
 export const orderHistory = async (req, res) => {
   try {
-    const orders = await Order.find({ buyerId: req.user._id });
+    const orders = await Order.find({ buyer: req.user._id }).sort({
+      createdAt: -1,
+    });
     return res.status(200).json({
       status: "Success",
       message: "Orders fetched successfully",
@@ -74,7 +75,7 @@ export const orderHistoryById = async (req, res) => {
   try {
     const { id } = req.params;
     const order = await Order.findById(id);
-    if (!order)
+    if (!order || order.buyer.toString() !== req.user._id.toString())
       return res.status(404).json({
         status: "Fail",
         message: "Order not found",
