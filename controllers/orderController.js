@@ -1,5 +1,6 @@
 import Order from "../models/Order.js";
 import Cart from "../models/Cart.js";
+import stripe from "../config/stripe.js";
 
 export const placeOrder = async (req, res) => {
   try {
@@ -35,7 +36,39 @@ export const placeOrder = async (req, res) => {
       totalAmount: totalAmount,
       shippingAddress,
       paymentMethod,
+      paymentStatus: "Pending",
     });
+
+    if (paymentMethod === "stripe") {
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: ["card"],
+        customer_email: req.user.email,
+        line_items: orderItems.map((item) => ({
+          price_data: {
+            currency: "inr",
+            product_data: { name: item.name },
+            unit_amount: Math.round(item.price * 100),
+          },
+          quantity: item.quantity,
+        })),
+        metadata: {
+          orderId: order._id.toString(),
+          buyerId: buyerId.toString(),
+        },
+        success_url: `${process.env.CLIENT_URL}/order/success?orderId=${order.id}`,
+        cancel_url: `${process.env.CLIENT_URL}/order/cancel?orderId=${order.id}`,
+      });
+
+      order.stripeSessionId = session.id;
+      await order.save();
+
+      return res.status(201).json({
+        status: "Success",
+        message: "Order created, redirect to Stripe checkout",
+        data: { order, checkoutUrl: session.url },
+      });
+    }
 
     cart.items = [];
     await cart.save();
@@ -43,7 +76,7 @@ export const placeOrder = async (req, res) => {
     return res.status(201).json({
       status: "Success",
       message: "Order placed successfully",
-      data: order,
+      data: { order },
     });
   } catch (error) {
     return res.status(500).json({
