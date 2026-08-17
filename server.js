@@ -1,5 +1,5 @@
+import "dotenv/config";
 import express from "express";
-import { config } from "dotenv";
 import connectDB from "./config/db.js";
 import productRoutes from "./router/productRoutes.js";
 import authRoutes from "./router/authRoutes.js";
@@ -9,12 +9,13 @@ import cartRoutes from "./router/cartRoutes.js";
 import buyerRoutes from "./router/buyerRoutes.js";
 import orderRoutes from "./router/orderRoutes.js";
 import adminOrderRoutes from "./router/adminOrderRoutes.js";
-
-config();
+import paymentRoutes from "./router/paymentRoutes.js";
 
 const app = express();
 
 const PORT = process.env.PORT || 3000;
+
+app.use("/api/payment", paymentRoutes);
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
