@@ -1,7 +1,13 @@
 import express from "express";
-import { stripeWebhook } from "../controllers/paymentController.js";
+import {
+  createCheckoutSession,
+  stripeWebhook,
+} from "../controllers/paymentController.js";
+import protectBuyer from "../middleware/buyerAuthMiddleware.js";
 
 const router = express.Router();
+
+router.post("/:orderId/checkout-session", protectBuyer, createCheckoutSession);
 
 router.post(
   "/webhook",
