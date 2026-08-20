@@ -9,6 +9,8 @@ import cartRoutes from "./router/cartRoutes.js";
 import buyerRoutes from "./router/buyerRoutes.js";
 import orderRoutes from "./router/orderRoutes.js";
 import adminOrderRoutes from "./router/adminOrderRoutes.js";
+import refundRoutes from "./router/refundRoutes.js";
+
 
 config();
 
@@ -27,6 +29,7 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/buyer", buyerRoutes);
 app.use("/api/order", orderRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
+app.use("/api/admin/refund", refundRoutes);
 
 const startServer = async () => {
   await connectDB();

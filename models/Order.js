@@ -44,8 +44,84 @@ const orderSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      enum: ["COD"],
+      enum: ["COD", "RAZORPAY"],
       required: true,
+    },
+
+    paymentStatus: {
+      type: String,
+      enum: ["Pending", "Paid", "Failed", "Refunded"],
+      default: "Pending",
+    },
+
+    // Razorpay payment ID: pay_xxxxx
+    paymentId: {
+      type: String,
+      default: null,
+    },
+
+    // Razorpay order ID: order_xxxxx
+    paymentOrderId: {
+      type: String,
+      default: null,
+    },
+
+    // Last Razorpay refund ID
+    refundId: {
+      type: String,
+      default: null,
+    },
+
+    // Total amount refunded so far
+    refundAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    refundStatus: {
+      type: String,
+      enum: [
+        "Not_Refunded",
+        "Requested",
+        "Partial",
+        "Full",
+        "Refunded",
+        "Failed",
+      ],
+      default: "Not_Refunded",
+    },
+
+    // Keep history of every partial/full refund
+    refundHistory: [
+      {
+        refundId: {
+          type: String,
+          required: true,
+        },
+        amount: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+        reason: {
+          type: String,
+          default: "",
+        },
+        status: {
+          type: String,
+          default: "Processed",
+        },
+        refundedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+
+    paidAt: {
+      type: Date,
+      default: null,
     },
 
     status: {
@@ -56,5 +132,9 @@ const orderSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+orderSchema.index({ buyer: 1, createdAt: -1 });
+orderSchema.index({ paymentStatus: 1 });
+orderSchema.index({ paymentId: 1 });
 
 export default mongoose.model("Order", orderSchema);
