@@ -10,18 +10,21 @@ import buyerRoutes from "./router/buyerRoutes.js";
 import orderRoutes from "./router/orderRoutes.js";
 import adminOrderRoutes from "./router/adminOrderRoutes.js";
 import paymentRoutes from "./router/paymentRoutes.js";
+import refundRoutes from "./router/refundRoutes.js";
 
 const app = express();
 
 const PORT = process.env.PORT || 3000;
 
+// Stripe webhook needs the raw request body, so /api/payment is mounted
+// before the JSON body parser (express.raw() is applied inside paymentRoutes).
 app.use("/api/payment", paymentRoutes);
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173/",
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true,
   }),
@@ -34,6 +37,7 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/buyer", buyerRoutes);
 app.use("/api/order", orderRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
+app.use("/api/admin/refund", refundRoutes);
 
 const startServer = async () => {
   await connectDB();

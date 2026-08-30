@@ -1,10 +1,14 @@
 import { MongoMemoryServer } from "mongodb-memory-server";
 
-const mongod = await MongoMemoryServer.create();
+const mongod = await MongoMemoryServer.create({
+  instance: { launchTimeout: 60000 },
+});
 process.env.MONGO_URI = mongod.getUri();
 process.env.JWT_SECRET = "test_admin_secret";
 process.env.JWT_BUYER = "test_buyer_secret";
 process.env.PORT = "5055";
+process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_placeholder";
+process.env.CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
 await import("../server.js");
 await new Promise((r) => setTimeout(r, 1500));
@@ -105,10 +109,13 @@ const checkout = await call("/order/place-order", {
 });
 check(
   "buyerA checkout succeeds",
-  checkout.status === 201 && checkout.body.data && checkout.body.data._id && checkout.body.data.totalAmount === 200,
+  checkout.status === 201 &&
+    checkout.body.data?.order?._id &&
+    checkout.body.data.order.totalAmount === 200 &&
+    checkout.body.data.order.paymentStatus === "pending",
   JSON.stringify(checkout.body)
 );
-const orderId = checkout.body.data?._id;
+const orderId = checkout.body.data?.order?._id;
 
 // 7. Cart is now empty
 const cartAfter = await call("/cart", { headers: { Authorization: `Bearer ${buyerAToken}` } });
@@ -185,6 +192,149 @@ check(
   "buyer sees updated status",
   refreshedDetail.status === 200 && refreshedDetail.body.data?.status === "Confirmed",
   JSON.stringify(refreshedDetail.body)
+);
+
+// ============================================================
+// Phase 4 - payments, invoices, refunds
+// ============================================================
+
+// 17. Invoice download blocked for an unpaid order
+const invoiceUnpaid = await call(`/order/${orderId}/invoice`, {
+  headers: { Authorization: `Bearer ${buyerAToken}` },
+});
+check(
+  "invoice blocked for unpaid order",
+  invoiceUnpaid.status === 400,
+  JSON.stringify(invoiceUnpaid.body)
+);
+
+// 18. Admin refund blocked for an unpaid order
+const refundUnpaid = await call(`/admin/refund/${orderId}`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${adminToken}` },
+  body: JSON.stringify({ amount: 50, reason: "test" }),
+});
+check(
+  "refund blocked for unpaid order",
+  refundUnpaid.status === 400,
+  JSON.stringify(refundUnpaid.body)
+);
+
+// 19. Admin refund rejects missing amount / reason
+const refundBadInput = await call(`/admin/refund/${orderId}`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${adminToken}` },
+  body: JSON.stringify({ amount: 0 }),
+});
+check(
+  "refund rejects invalid input",
+  refundBadInput.status === 400,
+  JSON.stringify(refundBadInput.body)
+);
+
+// 20. Refund route rejects a buyer token
+const refundAsBuyer = await call(`/admin/refund/${orderId}`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${buyerAToken}` },
+  body: JSON.stringify({ amount: 50, reason: "test" }),
+});
+check(
+  "refund route rejects buyer token",
+  refundAsBuyer.status === 401,
+  JSON.stringify(refundAsBuyer.body)
+);
+
+// 21. Admin can list refunds (empty so far)
+const refundList = await call("/admin/refund", {
+  headers: { Authorization: `Bearer ${adminToken}` },
+});
+check(
+  "admin list refunds returns ok",
+  refundList.status === 200 && Array.isArray(refundList.body.data) && refundList.body.data.length === 0,
+  JSON.stringify(refundList.body)
+);
+
+// 22. Simulate a paid Stripe order, then exercise invoice + partial + full refund.
+//     Stripe API calls are stubbed here so the flow runs without live keys.
+const Order = (await import("../models/Order.js")).default;
+const stripe = (await import("../config/stripe.js")).default;
+stripe.refunds.create = async ({ amount }) => ({
+  id: `re_test_${Date.now()}`,
+  status: "succeeded",
+  amount,
+});
+
+const paidOrder = await Order.create({
+  buyer: checkout.body.data.order.buyer,
+  items: checkout.body.data.order.items,
+  totalAmount: 200,
+  shippingAddress: "123 Buyer St",
+  paymentMethod: "stripe",
+  paymentStatus: "paid",
+  isPaid: true,
+  paidAt: new Date(),
+  paymentIntentId: "pi_test_123",
+});
+const paidOrderId = paidOrder._id.toString();
+
+const invoicePaid = await fetch(`${BASE}/order/${paidOrderId}/invoice`, {
+  headers: { Authorization: `Bearer ${buyerAToken}` },
+});
+const invoiceBuf = Buffer.from(await invoicePaid.arrayBuffer());
+check(
+  "invoice downloads as PDF for a paid order",
+  invoicePaid.status === 200 &&
+    invoicePaid.headers.get("content-type") === "application/pdf" &&
+    invoiceBuf.slice(0, 4).toString() === "%PDF",
+  `status=${invoicePaid.status} type=${invoicePaid.headers.get("content-type")} bytes=${invoiceBuf.length}`
+);
+
+const partialRefund = await call(`/admin/refund/${paidOrderId}`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${adminToken}` },
+  body: JSON.stringify({ amount: 50, reason: "partial test" }),
+});
+check(
+  "admin partial refund succeeds",
+  partialRefund.status === 200 &&
+    partialRefund.body.data?.refundStatus === "partial" &&
+    partialRefund.body.data?.totalRefunded === 50,
+  JSON.stringify(partialRefund.body)
+);
+
+const overRefund = await call(`/admin/refund/${paidOrderId}`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${adminToken}` },
+  body: JSON.stringify({ amount: 500, reason: "too much" }),
+});
+check(
+  "admin refund cannot exceed remaining balance",
+  overRefund.status === 400,
+  JSON.stringify(overRefund.body)
+);
+
+const fullRefund = await call(`/admin/refund/${paidOrderId}`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${adminToken}` },
+  body: JSON.stringify({ amount: 150, reason: "rest of it" }),
+});
+check(
+  "admin full refund flips order to refunded",
+  fullRefund.status === 200 &&
+    fullRefund.body.data?.refundStatus === "full" &&
+    fullRefund.body.data?.paymentStatus === "refunded",
+  JSON.stringify(fullRefund.body)
+);
+
+const refundListAfter = await call("/admin/refund", {
+  headers: { Authorization: `Bearer ${adminToken}` },
+});
+check(
+  "refunded order now appears in refund list with history",
+  refundListAfter.status === 200 &&
+    refundListAfter.body.data?.length === 1 &&
+    refundListAfter.body.data[0].refundHistory?.length === 2,
+  JSON.stringify(refundListAfter.body)
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

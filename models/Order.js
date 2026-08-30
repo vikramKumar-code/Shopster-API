@@ -47,14 +47,44 @@ const orderSchema = new mongoose.Schema(
       enum: ["COD", "stripe"],
       required: true,
     },
+
     paymentStatus: {
       type: String,
-      enum: ["pending", "paid", "failed"],
+      enum: ["pending", "paid", "failed", "refunded"],
       default: "pending",
     },
-    stripeSessionId: { type: String },
+
+    // Stripe references
+    stripeSessionId: { type: String, default: null },
+    // Stripe PaymentIntent id (pi_xxx) captured from the webhook; needed for refunds
+    paymentIntentId: { type: String, default: null },
+
     isPaid: { type: Boolean, default: false },
-    paidAt: { type: Date },
+    paidAt: { type: Date, default: null },
+
+    // ---- Refunds ----
+    // Last Stripe refund id (re_xxx)
+    refundId: { type: String, default: null },
+
+    // Total amount refunded so far
+    refundAmount: { type: Number, default: 0, min: 0 },
+
+    refundStatus: {
+      type: String,
+      enum: ["not_refunded", "partial", "full", "failed"],
+      default: "not_refunded",
+    },
+
+    // History of every partial/full refund
+    refundHistory: [
+      {
+        refundId: { type: String, required: true },
+        amount: { type: Number, required: true, min: 0 },
+        reason: { type: String, default: "" },
+        status: { type: String, default: "processed" },
+        refundedAt: { type: Date, default: Date.now },
+      },
+    ],
 
     status: {
       type: String,
@@ -64,5 +94,9 @@ const orderSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+orderSchema.index({ buyer: 1, createdAt: -1 });
+orderSchema.index({ paymentStatus: 1 });
+orderSchema.index({ stripeSessionId: 1 });
 
 export default mongoose.model("Order", orderSchema);
