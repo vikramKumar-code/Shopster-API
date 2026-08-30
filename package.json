@@ -8,6 +8,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "dev:memdb": "node scripts/dev-with-memory-db.mjs",
+    "dev:seed": "node scripts/dev-seed.mjs",
     "test:smoke": "node scripts/smoke-test.mjs"
   },
   "keywords": [],
