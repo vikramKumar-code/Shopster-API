@@ -44,8 +44,8 @@ export const createCheckoutSession = async (req, res) => {
         orderId: order._id.toString(),
         buyerId: req.user._id.toString(),
       },
-      success_url: `${process.env.CLIENT_URL}/order/success?orderId=${order._id}`,
-      cancel_url: `${process.env.CLIENT_URL}/order/cancel?orderId=${order._id}`,
+      success_url: `${process.env.CLIENT_URL}/order-success/${order._id}`,
+      cancel_url: `${process.env.CLIENT_URL}/checkout`,
     });
 
     order.stripeSessionId = session.id;
@@ -92,13 +92,21 @@ export const stripeWebhook = async (req, res) => {
 
     try {
       const order = await Order.findById(orderId);
+      // Idempotent: ignore duplicate webhooks for an already-paid order
       if (order && order.paymentStatus !== "paid") {
         order.paymentStatus = "paid";
         order.isPaid = true;
         order.paidAt = new Date();
+        // Keep the PaymentIntent id so refunds can be issued later
+        if (session.payment_intent) {
+          order.paymentIntentId =
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : session.payment_intent.id;
+        }
         await order.save();
 
-        await Cart.findByIdAndUpdate({ buyer: buyerId }, { items: [] });
+        await Cart.findOneAndUpdate({ buyer: buyerId }, { items: [] });
       }
     } catch (err) {
       console.error("Error updating order after payment:", err);
@@ -107,7 +115,7 @@ export const stripeWebhook = async (req, res) => {
     const session = event.data.object;
     const { orderId } = session.metadata;
     try {
-      await Order.findByIdAndUpdate(orderId, { paymentStatus: "Failed" });
+      await Order.findByIdAndUpdate(orderId, { paymentStatus: "failed" });
     } catch (err) {
       console.error("Error updating order after expiration:", err);
     }

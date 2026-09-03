@@ -1,6 +1,7 @@
 import Order from "../models/Order.js";
 import Cart from "../models/Cart.js";
 import stripe from "../config/stripe.js";
+import { generatePDFInvoice } from "../utils/invoiceGenerator.js";
 
 export const placeOrder = async (req, res) => {
   try {
@@ -36,7 +37,7 @@ export const placeOrder = async (req, res) => {
       totalAmount: totalAmount,
       shippingAddress,
       paymentMethod,
-      paymentStatus: "Pending",
+      paymentStatus: "pending",
     });
 
     if (paymentMethod === "stripe") {
@@ -56,8 +57,8 @@ export const placeOrder = async (req, res) => {
           orderId: order._id.toString(),
           buyerId: buyerId.toString(),
         },
-        success_url: `${process.env.CLIENT_URL}/order/success?orderId=${order.id}`,
-        cancel_url: `${process.env.CLIENT_URL}/order/cancel?orderId=${order.id}`,
+        success_url: `${process.env.CLIENT_URL}/order-success/${order._id}`,
+        cancel_url: `${process.env.CLIENT_URL}/checkout`,
       });
 
       order.stripeSessionId = session.id;
@@ -124,5 +125,125 @@ export const orderHistoryById = async (req, res) => {
       status: "Fail",
       message: `Failed to fetch order: ${error.message}`,
     });
+  }
+};
+
+export const downloadInvoice = async (
+  req,
+  res,
+) => {
+  try {
+    const { orderId } =
+      req.params;
+
+    const buyerId =
+      req.user._id;
+
+    // Find order
+    const order =
+      await Order.findById(
+        orderId,
+      )
+        .populate(
+          "buyer",
+          "username name email phone address",
+        )
+        .populate(
+          "items.product",
+        );
+
+    // Order doesn't exist
+    if (!order) {
+      return res
+        .status(404)
+        .json({
+          status: "Fail",
+          message:
+            "Order not found",
+        });
+    }
+
+    // --------------------------------
+    // Buyer ownership check
+    // --------------------------------
+
+    if (
+      !order.buyer ||
+      order.buyer._id.toString() !==
+        buyerId.toString()
+    ) {
+      return res
+        .status(404)
+        .json({
+          status: "Fail",
+          message:
+            "Order not found",
+        });
+    }
+
+    // --------------------------------
+    // Invoice only for paid order
+    // --------------------------------
+
+    if (order.paymentStatus !== "paid") {
+      return res
+        .status(400)
+        .json({
+          status: "Fail",
+          message:
+            "Invoice is only available for paid orders",
+        });
+    }
+
+    // --------------------------------
+    // Generate PDF
+    // --------------------------------
+
+    const pdfBuffer =
+      await generatePDFInvoice(
+        order,
+      );
+
+    const invoiceNumber =
+      order._id
+        .toString()
+        .slice(-8)
+        .toUpperCase();
+
+    // --------------------------------
+    // Response headers
+    // --------------------------------
+
+    res.setHeader(
+      "Content-Type",
+      "application/pdf",
+    );
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="invoice_${invoiceNumber}.pdf"`,
+    );
+
+    res.setHeader(
+      "Content-Length",
+      pdfBuffer.length,
+    );
+
+    return res
+      .status(200)
+      .send(pdfBuffer);
+  } catch (error) {
+    console.error(
+      "Invoice download error:",
+      error,
+    );
+
+    return res
+      .status(500)
+      .json({
+        status: "Fail",
+        message:
+          "Failed to generate invoice",
+      });
   }
 };
